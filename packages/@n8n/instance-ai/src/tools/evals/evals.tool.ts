@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { Tool } from '@n8n/agents';
 import { instanceAiConfirmationSeveritySchema } from '@n8n/api-types';
 import type { WorkflowJSON } from '@n8n/workflow-sdk';
 import { nanoid } from 'nanoid';
@@ -139,13 +139,17 @@ type ConfirmResume = z.infer<typeof confirmResumeSchema>;
 type QuestionsResume = z.infer<typeof questionsResumeSchema>;
 type SuspendPayload = z.infer<typeof suspendSchema>;
 type EvalsToolExecutionContext = {
+	resumeData?: unknown;
+	suspend?: (payload: SuspendPayload) => Promise<never> | Promise<void>;
 	agent?: {
 		resumeData?: unknown;
-		suspend?: (payload: SuspendPayload) => Promise<void>;
+		suspend?: (payload: SuspendPayload) => Promise<never> | Promise<void>;
 	};
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+const DEFAULT_EXPECTED_OUTPUT_COLUMN = 'expected_output';
 
 function composeOfferMessage(aiNodeNames: string[], namedRefs: NamedRef[]): string {
 	const subject =
@@ -177,19 +181,27 @@ function composeOfferMessage(aiNodeNames: string[], namedRefs: NamedRef[]): stri
 }
 
 function hasResumeData(ctx: EvalsToolExecutionContext): boolean {
-	const resumeData = ctx.agent?.resumeData;
+	const resumeData = getResumeData(ctx);
 	return resumeData !== undefined && resumeData !== null;
 }
 
+function getResumeData(ctx: EvalsToolExecutionContext): unknown {
+	return ctx.resumeData ?? ctx.agent?.resumeData;
+}
+
+function getSuspend(ctx: EvalsToolExecutionContext) {
+	return ctx.suspend ?? ctx.agent?.suspend;
+}
+
 function getConfirmResume(ctx: EvalsToolExecutionContext): ConfirmResume | undefined {
-	const resumeData = ctx.agent?.resumeData;
+	const resumeData = getResumeData(ctx);
 	if (resumeData === undefined || resumeData === null) return undefined;
 	const parsed = confirmResumeSchema.safeParse(resumeData);
 	return parsed.success ? parsed.data : undefined;
 }
 
 function getQuestionsResume(ctx: EvalsToolExecutionContext): QuestionsResume | undefined {
-	const resumeData = ctx.agent?.resumeData;
+	const resumeData = getResumeData(ctx);
 	if (resumeData === undefined || resumeData === null) return undefined;
 	const parsed = questionsResumeSchema.safeParse(resumeData);
 	return parsed.success ? parsed.data : undefined;
@@ -232,18 +244,18 @@ function metricLabel(
 // ── Tool factory ───────────────────────────────────────────────────────────
 
 export function createEvalsTool(context: InstanceAiContext) {
-	return createTool({
-		id: 'evals',
-		description:
+	return new Tool('evals')
+		.description(
 			"Eval suite orchestration. action='offer' → eligibility precheck after a fresh build; when eligible, returns a chat message you must output verbatim and then end the turn so the user can reply naturally. " +
-			"action='recommend-metric' → opinionated single-metric suggestion; suspends with approve/deny. Call FIRST when choosing metrics. " +
-			"action='select-metrics' → multi-select picker; call ONLY when `recommend-metric` was denied. " +
-			"action='propose' → build the task spec for the eval-setup sub-agent (creates an empty DataTable by default). " +
-			"action='offer-data-population' → approve/deny widget after eval setup, asking whether to auto-populate the empty DataTable.",
-		inputSchema,
-		suspendSchema,
-		resumeSchema,
-		execute: async (input: Input, ctx: EvalsToolExecutionContext) => {
+				"action='recommend-metric' → opinionated single-metric suggestion; suspends with approve/deny. Call FIRST when choosing metrics. " +
+				"action='select-metrics' → multi-select picker; call ONLY when `recommend-metric` was denied. " +
+				"action='propose' → build the task spec for the eval-setup sub-agent (creates an empty DataTable by default). " +
+				"action='offer-data-population' → approve/deny widget after eval setup, asking whether to auto-populate the empty DataTable.",
+		)
+		.input(inputSchema)
+		.suspend(suspendSchema)
+		.resume(resumeSchema)
+		.handler(async (input: Input, ctx) => {
 			switch (input.action) {
 				case 'offer':
 					return await executeOffer(context, input);
@@ -256,8 +268,8 @@ export function createEvalsTool(context: InstanceAiContext) {
 				case 'offer-data-population':
 					return await executeOfferDataPopulation(context, input, ctx);
 			}
-		},
-	});
+		})
+		.build();
 }
 
 // ── action: offer ──────────────────────────────────────────────────────────
@@ -303,7 +315,7 @@ async function executeRecommendMetric(
 	ctx: EvalsToolExecutionContext,
 ) {
 	const resumeData = getConfirmResume(ctx);
-	const suspend = ctx.agent?.suspend;
+	const suspend = getSuspend(ctx);
 
 	const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
 	const detection = detectAiNodes(wf);
@@ -321,11 +333,13 @@ async function executeRecommendMetric(
 		return { approved: false as const };
 	}
 
-	await suspend?.({
-		requestId: nanoid(),
-		message: composeRecommendMessage(wf, agentName, metricId),
-		severity: 'info' as const,
-	});
+	if (suspend) {
+		return await suspend({
+			requestId: nanoid(),
+			message: composeRecommendMessage(wf, agentName, metricId),
+			severity: 'info' as const,
+		});
+	}
 	return { approved: false as const };
 }
 
@@ -337,7 +351,7 @@ async function executeSelectMetrics(
 	ctx: EvalsToolExecutionContext,
 ) {
 	const resumeData = getQuestionsResume(ctx);
-	const suspend = ctx.agent?.suspend;
+	const suspend = getSuspend(ctx);
 
 	const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
 	const detection = detectAiNodes(wf);
@@ -365,20 +379,22 @@ async function executeSelectMetrics(
 	const defaultLabels = defaults.map((id) => METRIC_CATALOG[id].name);
 
 	const questionId = nanoid();
-	await suspend?.({
-		requestId: nanoid(),
-		message: 'Pick what to measure',
-		severity: 'info' as const,
-		inputType: 'questions' as const,
-		questions: [
-			{
-				id: questionId,
-				question: `Pick what you'd like to measure on each test case (defaults pre-selected: ${defaultLabels.join(', ')})`,
-				type: 'multi' as const,
-				options: allLabels,
-			},
-		],
-	});
+	if (suspend) {
+		return await suspend({
+			requestId: nanoid(),
+			message: 'Pick what to measure',
+			severity: 'info' as const,
+			inputType: 'questions' as const,
+			questions: [
+				{
+					id: questionId,
+					question: `Pick what you'd like to measure on each test case (defaults pre-selected: ${defaultLabels.join(', ')})`,
+					type: 'multi' as const,
+					options: allLabels,
+				},
+			],
+		});
+	}
 	return { chosenMetricIds: defaults };
 }
 
@@ -434,6 +450,10 @@ async function executePropose(context: InstanceAiContext, input: z.infer<typeof 
 	if (resolvedMetrics.length === 0) {
 		resolvedMetrics = getMetricsByIds(['correctness']);
 	}
+	const outputColumns = resolvedMetrics.some((metric) => metric.requiresExpected)
+		? [DEFAULT_EXPECTED_OUTPUT_COLUMN]
+		: [];
+	const dataTableColumns = [...new Set([...inputColumns, ...outputColumns])];
 
 	let dataTableId: string | undefined = input.existingDataTableId;
 	let createdTable: { id: string; name: string; projectId?: string } | undefined;
@@ -449,7 +469,7 @@ async function executePropose(context: InstanceAiContext, input: z.infer<typeof 
 		const dt = await createEmptyEvalDataTable(context, {
 			workflowName: wf.name ?? 'Workflow',
 			projectId: input.projectId,
-			columns: inputColumns,
+			columns: dataTableColumns,
 		});
 		dataTableId = dt.id;
 		createdTable = dt;
@@ -464,7 +484,7 @@ async function executePropose(context: InstanceAiContext, input: z.infer<typeof 
 		existingDataTableId: dataTableId,
 		projectId: input.projectId,
 		suggestedInputColumns: inputColumns,
-		suggestedOutputColumns: [],
+		suggestedOutputColumns: outputColumns,
 		enabledMetrics: resolvedMetrics,
 		namedRefs: filteredNamedRefs,
 	});
@@ -505,7 +525,7 @@ async function executeOfferDataPopulation(
 	ctx: EvalsToolExecutionContext,
 ) {
 	const resumeData = getConfirmResume(ctx);
-	const suspend = ctx.agent?.suspend;
+	const suspend = getSuspend(ctx);
 
 	const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
 	const reqs = analyzeEvalDataRequirements(wf);
@@ -535,10 +555,12 @@ async function executeOfferDataPopulation(
 		// fall through — assume empty / unknown and continue with the offer
 	}
 
-	await suspend?.({
-		requestId: nanoid(),
-		message: 'Generate some sample test inputs to get you started?',
-		severity: 'info' as const,
-	});
+	if (suspend) {
+		return await suspend({
+			requestId: nanoid(),
+			message: 'Generate some sample test inputs to get you started?',
+			severity: 'info' as const,
+		});
+	}
 	return { approved: false as const };
 }

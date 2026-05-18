@@ -247,7 +247,7 @@ describe('evalsTool — action: offer (eligibility precheck + chat message)', ()
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
@@ -260,7 +260,7 @@ describe('evalsTool — action: offer (eligibility precheck + chat message)', ()
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
@@ -273,7 +273,7 @@ describe('evalsTool — action: offer (eligibility precheck + chat message)', ()
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
@@ -296,7 +296,7 @@ describe('evals tool — recommend-metric action', () => {
 		const ctx = makeCtx(aiWfWithTools());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'recommend-metric', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'recommend-metric', workflowId: 'w1' }, {
 			agent: { resumeData: { approved: true } },
 		} as never)) as Record<string, unknown>;
 
@@ -307,7 +307,7 @@ describe('evals tool — recommend-metric action', () => {
 		const ctx = makeCtx(aiWfWithTools());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'recommend-metric', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'recommend-metric', workflowId: 'w1' }, {
 			agent: { resumeData: { approved: false } },
 		} as never)) as Record<string, unknown>;
 
@@ -320,7 +320,7 @@ describe('evals tool — recommend-metric action', () => {
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
 
-		await tool.execute!({ action: 'recommend-metric', workflowId: 'w1' }, {
+		await tool.handler!({ action: 'recommend-metric', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never);
 
@@ -331,11 +331,9 @@ describe('evals tool — recommend-metric action', () => {
 				requestId: expect.any(String) as unknown,
 				message: expect.stringContaining('Correctness') as unknown,
 			}),
-			undefined,
 		);
 		expect(suspend).toHaveBeenCalledWith(
 			expect.not.objectContaining({ inputType: expect.anything() as unknown }),
-			undefined,
 		);
 	});
 });
@@ -350,7 +348,7 @@ describe('evals tool — select-metrics action', () => {
 		const ctx = makeCtx(aiWfWithTools());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'select-metrics', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'select-metrics', workflowId: 'w1' }, {
 			agent: {
 				resumeData: {
 					approved: true,
@@ -369,7 +367,7 @@ describe('evals tool — select-metrics action', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'select-metrics', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'select-metrics', workflowId: 'w1' }, {
 			agent: { resumeData: { approved: false } },
 		} as never)) as Record<string, unknown>;
 
@@ -380,7 +378,7 @@ describe('evals tool — select-metrics action', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'select-metrics', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'select-metrics', workflowId: 'w1' }, {
 			agent: {
 				resumeData: {
 					approved: true,
@@ -413,7 +411,7 @@ describe('evals tool — select-metrics action', () => {
 		const ctx = makeCtx(wf);
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'select-metrics', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'select-metrics', workflowId: 'w1' }, {
 			agent: {},
 		} as never)) as Record<string, unknown>;
 
@@ -456,7 +454,7 @@ describe('evals tool — select-metrics action', () => {
 		const ctx = makeCtx(workflow);
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
-		await tool.execute!({ action: 'select-metrics', workflowId: 'w1' }, {
+		await tool.handler!({ action: 'select-metrics', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never);
 
@@ -471,7 +469,6 @@ describe('evals tool — select-metrics action', () => {
 					}),
 				],
 			}),
-			undefined,
 		);
 	});
 });
@@ -485,17 +482,20 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{ action: 'propose', workflowId: 'w1', projectId: 'p1', metrics: ['correctness'] },
 			{ agent: {} } as never,
 		)) as Record<string, unknown>;
 
 		// dataTableService.create is called — creates empty table
 		expect(ctx.dataTableService.create).toHaveBeenCalledTimes(1);
-		// columns come from analyzeAgentInputColumns → 'user_query' (from $json.user_query in parameters)
+		// columns include the agent input and the expected output required by correctness
 		expect(ctx.dataTableService.create).toHaveBeenCalledWith(
 			'AI Flow — eval samples',
-			[{ name: 'user_query', type: 'string' }],
+			[
+				{ name: 'user_query', type: 'string' },
+				{ name: 'expected_output', type: 'string' },
+			],
 			{ projectId: 'p1' },
 		);
 
@@ -515,7 +515,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{ action: 'propose', workflowId: 'w1', projectId: 'p1', metrics: ['correctness'] },
 			{ agent: {} } as never,
 		)) as Record<string, unknown>;
@@ -541,7 +541,7 @@ describe('evals tool — propose action (changed)', () => {
 		});
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{ action: 'propose', workflowId: 'w1', projectId: 'p-input', metrics: ['correctness'] },
 			{ agent: {} } as never,
 		)) as Record<string, unknown>;
@@ -553,7 +553,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{
 				action: 'propose',
 				workflowId: 'w1',
@@ -573,7 +573,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{
 				action: 'propose',
 				workflowId: 'w1',
@@ -592,7 +592,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: [] }, {
+		const result = (await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: [] }, {
 			agent: {},
 		} as never)) as Record<string, unknown>;
 
@@ -618,7 +618,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(wf);
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'propose', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'propose', workflowId: 'w1' }, {
 			agent: {},
 		} as never)) as Record<string, unknown>;
 
@@ -629,7 +629,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(evalConfiguredWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'propose', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'propose', workflowId: 'w1' }, {
 			agent: {},
 		} as never)) as Record<string, unknown>;
 
@@ -643,7 +643,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{
 				action: 'propose',
 				workflowId: 'w1',
@@ -668,7 +668,7 @@ describe('evals tool — propose action (changed)', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!(
+		const result = (await tool.handler!(
 			{ action: 'propose', workflowId: 'w1', datasetChoice: 'later', metrics: ['correctness'] },
 			{ agent: {} } as never,
 		)) as Record<string, unknown>;
@@ -692,7 +692,7 @@ describe('evals tool — offer-data-population action', () => {
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
 
-		await tool.execute!({ action: 'offer-data-population', workflowId: 'w1' }, {
+		await tool.handler!({ action: 'offer-data-population', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never);
 
@@ -703,7 +703,6 @@ describe('evals tool — offer-data-population action', () => {
 				requestId: expect.any(String) as unknown,
 				message: expect.stringMatching(/sample test inputs/i) as unknown,
 			}),
-			undefined,
 		);
 	});
 
@@ -711,7 +710,7 @@ describe('evals tool — offer-data-population action', () => {
 		const ctx = makeCtx(aiWf()); // no EvaluationTrigger wired to DataTable
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'offer-data-population', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer-data-population', workflowId: 'w1' }, {
 			agent: {},
 		} as never)) as Record<string, unknown>;
 
@@ -726,7 +725,7 @@ describe('evals tool — offer-data-population action', () => {
 		const tool = createEvalsTool(ctx);
 		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'offer-data-population', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer-data-population', workflowId: 'w1' }, {
 			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
@@ -739,7 +738,7 @@ describe('evals tool — offer-data-population action', () => {
 		ctx.dataTableService.queryRows = jest.fn().mockResolvedValue({ count: 0, data: [] });
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'offer-data-population', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer-data-population', workflowId: 'w1' }, {
 			agent: { resumeData: { approved: true } },
 		} as never)) as Record<string, unknown>;
 
@@ -755,7 +754,7 @@ describe('evals tool — offer-data-population action', () => {
 		ctx.dataTableService.queryRows = jest.fn().mockResolvedValue({ count: 0, data: [] });
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'offer-data-population', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer-data-population', workflowId: 'w1' }, {
 			agent: { resumeData: { approved: false } },
 		} as never)) as Record<string, unknown>;
 
@@ -772,7 +771,7 @@ describe('evals tool — offer with named refs', () => {
 		const ctx = makeCtx(aiWfWithNamedRef());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer', workflowId: 'w1' }, {
 			agent: { resumeData: undefined },
 		} as never)) as { message: string };
 
@@ -786,7 +785,7 @@ describe('evals tool — offer with named refs', () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+		const result = (await tool.handler!({ action: 'offer', workflowId: 'w1' }, {
 			agent: { resumeData: undefined },
 		} as never)) as { message: string };
 
@@ -846,7 +845,7 @@ describe('evals tool — propose with tool-ref pinData', () => {
 		const ctx = makeCtx(aiWfWithToolRef());
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+		await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
 			agent: {},
 		} as never);
 
@@ -871,7 +870,7 @@ describe('evals tool — propose with tool-ref pinData', () => {
 		const ctx = makeCtx(aiWfWithToolRef(), { create });
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+		await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
 			agent: {},
 		} as never);
 
@@ -892,7 +891,7 @@ describe('evals tool — propose with tool-ref pinData', () => {
 		const ctx = makeCtx(aiWfWithNamedRef());
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+		await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
 			agent: {},
 		} as never);
 
@@ -905,7 +904,7 @@ describe('evals tool — propose with tool-ref pinData', () => {
 		const ctx = makeCtx(aiWfWithToolRef());
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+		await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
 			agent: {},
 		} as never);
 
@@ -923,7 +922,7 @@ describe('evals tool — propose with named refs', () => {
 		const ctx = makeCtx(aiWfWithNamedRef(), { create });
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+		await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
 			agent: {},
 		} as never);
 
@@ -939,7 +938,7 @@ describe('evals tool — propose with named refs', () => {
 		const ctx = makeCtx(aiWfWithDirectAndNamedRef(), { create });
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+		await tool.handler!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
 			agent: {},
 		} as never);
 
