@@ -1,6 +1,5 @@
-import type { InstanceAiEvalMetricProposal } from '@n8n/api-types';
-
 import type { NamedRef } from './detect-agent-named-refs.service';
+import type { MetricProposal } from './metric-catalog';
 
 export interface FormatEvalSetupTaskInput {
 	workflowId: string;
@@ -11,7 +10,7 @@ export interface FormatEvalSetupTaskInput {
 	projectId?: string;
 	suggestedInputColumns: string[];
 	suggestedOutputColumns: string[];
-	enabledMetrics: InstanceAiEvalMetricProposal[];
+	enabledMetrics: MetricProposal[];
 	namedRefs?: NamedRef[];
 }
 
@@ -90,7 +89,7 @@ ${rewrites}
 After your edits the agent has TWO incoming \`main\` connections: one from the Eval Production Adapter (production runs) and one from the EvaluationTrigger (eval runs). Both produce \`$json.<column>\` for the agent. Sub-components reference the agent by name, so they resolve to the agent's last input row in both modes.`;
 }
 
-function formatMetric(m: InstanceAiEvalMetricProposal): string {
+function formatMetric(m: MetricProposal): string {
 	const cannedSuffix = m.cannedMetricKey ? `, canned=${m.cannedMetricKey}` : '';
 	const promptSuffix = m.prompt ? `\n  Judge prompt: ${m.prompt}` : '';
 	return `- ${m.name} (${m.kind}${cannedSuffix}): ${m.description}${promptSuffix}`;

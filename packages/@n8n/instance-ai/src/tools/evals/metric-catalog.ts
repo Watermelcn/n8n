@@ -1,9 +1,25 @@
-import type { InstanceAiEvalMetricProposal } from '@n8n/api-types';
 import type { WorkflowJSON } from '@n8n/workflow-sdk';
 
 import { isRecord } from './column-ref-utils';
 
-export interface MetricCatalogEntry extends InstanceAiEvalMetricProposal {
+export const METRIC_IDS = ['correctness', 'relevance', 'tool_use', 'helpfulness'] as const;
+export type MetricId = (typeof METRIC_IDS)[number];
+
+export interface MetricProposal {
+	id: string;
+	name: string;
+	kind: string;
+	cannedMetricKey?: string;
+	description: string;
+	prompt?: string;
+	defaultEnabled: boolean;
+}
+
+export interface MetricCatalogEntry extends MetricProposal {
+	id: MetricId;
+	kind: 'llm-judge';
+	cannedMetricKey: MetricId;
+	prompt: string;
 	requiresExpected: boolean;
 }
 
@@ -50,10 +66,7 @@ export const METRIC_CATALOG = {
 		defaultEnabled: false,
 		requiresExpected: false,
 	},
-} satisfies Record<string, MetricCatalogEntry>;
-
-export const METRIC_IDS = ['correctness', 'relevance', 'tool_use', 'helpfulness'] as const;
-export type MetricId = (typeof METRIC_IDS)[number];
+} satisfies Record<MetricId, MetricCatalogEntry>;
 
 function isMetricId(id: string): id is MetricId {
 	return (METRIC_IDS as readonly string[]).includes(id);
